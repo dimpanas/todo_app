@@ -1,0 +1,19 @@
+[project]
+name = "todo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18.4",
+    "bcrypt==4.0.1",
+    "fastapi>=0.135.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "passlib>=1.7.4",
+    "python-dotenv>=1.2.2",
+    "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.22",
+    "sqlalchemy>=2.0.48",
+    "uvicorn>=0.41.0",
+]
