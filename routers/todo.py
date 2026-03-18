@@ -1,3 +1,4 @@
+import math
 from typing import Annotated
 
 from fastapi import APIRouter, Path
@@ -12,7 +13,7 @@ from exceptions import (
     UnauthorizedActionException,
 )
 from models import Todos
-from schemas import TodoRequest, TodoResponse
+from schemas import TodoPaginationResponse, TodoRequest, TodoResponse
 
 from .auth import get_current_user
 
@@ -54,17 +55,36 @@ async def create_todo(
 
 
 # READ
-@router.get("/", response_model=list[TodoResponse], status_code=status.HTTP_200_OK)
+@router.get("/", response_model=TodoPaginationResponse, status_code=status.HTTP_200_OK)
 async def read_all_todos(
-    db: db_dependencies, user: user_dependencies, all_records: bool = False
+    db: db_dependencies,
+    user: user_dependencies,
+    all_records: bool = False,
+    page: int = 1,
+    page_size: int = 10,
 ):
+
+    skip = (page - 1) * page_size
+    query = db.query(Todos)
+
     if user is None:
         raise AuthenticationException()
 
-    if all_records and user.get("role") == "admin":
-        return db.query(Todos).all()
+    if not (all_records and user.get("role") == "admin"):
+        query = query.filter(Todos.owner_id == user.get("id"))
 
-    return db.query(Todos).filter(Todos.owner_id == user.get("id")).all()
+    total_count = query.count()
+    total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
+
+    todos = query.offset(skip).limit(page_size).all()
+
+    return {
+        "items": todos,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @router.get(

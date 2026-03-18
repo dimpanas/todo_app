@@ -7,7 +7,15 @@ class TodoBase(BaseModel):
     title: str = Field(min_length=1)
     description: str = Field(min_length=1, max_length=100)
     priority: int = Field(gt=0, lt=6)
-    complete: bool
+    complete: bool = Field(default=False)
+
+
+class TodoPaginationResponse(BaseModel):
+    items: list[TodoResponse]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
 
 
 class TodoRequest(TodoBase):
@@ -32,19 +40,27 @@ class UserBase(BaseModel):
     is_active: bool
 
 
+class UserUsername(BaseModel):
+    username: str
+
+    class Config:
+        from_attributes = True
+
+
+class UserPaginationResponse(BaseModel):
+    items: list[UserResponse]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class UserRequest(UserBase):
     hashed_password: str = Field(min_length=8)
 
 
 class UserResponse(UserBase):
     id: int = Field(gt=0)
-
-    class Config:
-        from_attributes = True
-
-
-class UserUsername(BaseModel):
-    username: str
 
     class Config:
         from_attributes = True

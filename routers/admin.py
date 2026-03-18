@@ -1,3 +1,4 @@
+import math
 from typing import Annotated
 
 from fastapi import APIRouter, Path
@@ -14,7 +15,7 @@ from exceptions import (
     UserAlreadyExist,
 )
 from models import Users
-from schemas import UserRequest, UserResponse
+from schemas import UserPaginationResponse, UserRequest, UserResponse
 
 from .auth import get_current_user
 
@@ -63,20 +64,40 @@ async def create_user(
 
 # READ
 @router.get(
-    "/get_users", response_model=list[UserResponse], status_code=status.HTTP_200_OK
+    "/get_users", response_model=UserPaginationResponse, status_code=status.HTTP_200_OK
 )
-async def get_users(user: user_dependencies, db: db_dependencies):
+async def get_users(
+    user: user_dependencies,
+    db: db_dependencies,
+    page: int = 1,
+    page_size: int = 10,
+):
     if user is None:
         raise AuthenticationException()
 
     if user.get("role") != "admin":
         raise UnauthorizedActionException()
 
-    return db.query(Users).all()
+    skip = (page - 1) * page_size
+    query = db.query(Users)
+    total_count = query.count()
+    total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
+
+    users = query.offset(skip).limit(page_size).all()
+
+    return {
+        "items": users,
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @router.get(
-    "/get_user/{user_id}", response_model=UserResponse, status_code=status.HTTP_200_OK
+    "/get_user/{user_id}",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
 )
 async def get_user(
     user: user_dependencies, db: db_dependencies, user_id: Annotated[int, Path(gt=0)]
@@ -126,7 +147,7 @@ async def update_user(
 # DELETE
 @router.delete("/user/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
-    user: user_dependencies, db: db_dependencies, user_id=Annotated[int, Path(gt=0)]
+    user: user_dependencies, db: db_dependencies, user_id: Annotated[int, Path(gt=0)]
 ):
     if user is None:
         raise AuthenticationException()

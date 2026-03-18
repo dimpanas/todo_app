@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.params import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -48,10 +48,7 @@ def get_current_user(
         user_id: int = payload.get("id")
         role: str = payload.get("role")
         if username is None or user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate user.",
-            )
+            raise AuthenticationException(details="Could not validate user")
 
         return {"username": username, "id": user_id, "role": role}
     except JWTError:
