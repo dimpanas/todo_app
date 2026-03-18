@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from database import get_db
+from exceptions import (
+    AuthenticationException,
+    UserAlreadyExist,
+)
 from models import UserRole, Users
 from schemas import UserRequest, UserResponse
 
@@ -51,31 +55,22 @@ def get_current_user(
 
         return {"username": username, "id": user_id, "role": role}
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user."
-        )
+        raise AuthenticationException(details="Could not validate user")
 
 
-@router.post(
-    "/login",
-    status_code=status.HTTP_200_OK,
-    responses={
-        401: {"description": "Invalid username or password"},
-        404: {"description": "User not found"},
-    },
-)
+@router.post("/login", status_code=status.HTTP_200_OK)
 async def login_for_access_token(
     db: db_dependencies, from_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ):
     user = db.query(Users).filter(Users.username == from_data.username).first()
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise AuthenticationException(details="Username not found")
 
     password = bcrypt_context.verify(from_data.password, user.hashed_password)
 
     if not password:
-        raise HTTPException(status_code=401, detail="Incorrect password.")
+        raise AuthenticationException(details="Incorrect Password")
 
     token = create_access_token(
         user.username, user.id, user.role, timedelta(minutes=20)
@@ -86,10 +81,7 @@ async def login_for_access_token(
 
 # REGISTER
 @router.post(
-    "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={400: {"description": "Username or email already registered"}},
+    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_user(db: db_dependencies, create_user_request: UserRequest):
 
@@ -100,9 +92,9 @@ async def create_user(db: db_dependencies, create_user_request: UserRequest):
         db.query(Users).filter(Users.username == create_user_request.username).first()
     )
     if existing_email:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise UserAlreadyExist(details="Email already registered")
     if existing_username:
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise UserAlreadyExist(details="Username already registered")
 
     create_user_model = Users(
         email=create_user_request.email,
