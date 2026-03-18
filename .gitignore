@@ -1,19 +1,33 @@
 # Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+**/__pycache__/
+**/*.py[oc]
+**/build/
+**/dist/
+**/wheels/
+**/*.egg-info
+
 
 # Virtual environments
-.venv
+**/.venv/
+
 
 #VS Code extensions
 .vscode/
+.DS_Store
+
 
 #Data and Databases
-*.sql
-*.db
-*.sqlite
-*.sqlite3
+**/*.sql
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+
+#Frontend
+**/node_modules/
+**/dist/
+frontend/.env*
+
+
+# Alembic
+backend/alembic/versions/__pycache__/
