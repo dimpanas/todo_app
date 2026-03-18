@@ -23,6 +23,7 @@ class Users(Base):
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     role = Column(SQLEnum(UserRole), default=UserRole.USER)
+    refresh_token = Column(String)
 
     todos = relationship("Todos", back_populates="owner")
 
