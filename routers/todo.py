@@ -1,11 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Path
 from fastapi.params import Depends
 from sqlalchemy.orm import Session
 from starlette import status
 
 from database import get_db
+from exceptions import (
+    AuthenticationException,
+    ResourceNotFoundException,
+    UnauthorizedActionException,
+)
 from models import Todos
 from schemas import TodoRequest, TodoResponse
 
@@ -17,19 +22,12 @@ router = APIRouter(prefix="/user", tags=["user"])
 db_dependencies = Annotated[Session, Depends(get_db)]
 user_dependencies = Annotated[dict, Depends(get_current_user)]
 
-not_found = "Todo not found"
-auth_failed = "Authentication Failed"
-
 
 # CREATE
 @router.post(
     "/create_todo",
     response_model=TodoResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={
-        401: {"description": "User not found"},
-        403: {"description": "Is not admin"},
-    },
 )
 async def create_todo(
     user: user_dependencies,
@@ -38,7 +36,7 @@ async def create_todo(
     target_user_id: int = None,
 ):
     if user is None:
-        raise HTTPException(status_code=401, detail=auth_failed)
+        raise AuthenticationException()
 
     final_owner_id = user.get("id")
 
@@ -46,7 +44,7 @@ async def create_todo(
         if user.get("role") == "admin":
             final_owner_id = target_user_id
         else:
-            raise HTTPException(status_code=403, detail=not_found)
+            raise UnauthorizedActionException()
 
     todo_model = Todos(**todo_request.model_dump(), owner_id=final_owner_id)
     db.add(todo_model)
@@ -56,17 +54,12 @@ async def create_todo(
 
 
 # READ
-@router.get(
-    "/",
-    response_model=list[TodoResponse],
-    status_code=status.HTTP_200_OK,
-    responses={401: {"description": "User not found"}},
-)
+@router.get("/", response_model=list[TodoResponse], status_code=status.HTTP_200_OK)
 async def read_all_todos(
     db: db_dependencies, user: user_dependencies, all_records: bool = False
 ):
     if user is None:
-        raise HTTPException(status_code=401, detail=auth_failed)
+        raise AuthenticationException()
 
     if all_records and user.get("role") == "admin":
         return db.query(Todos).all()
@@ -75,13 +68,7 @@ async def read_all_todos(
 
 
 @router.get(
-    "/todo/{todo_id}",
-    response_model=TodoResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        404: {"description": "Todo not found"},
-        401: {"description": "User not found"},
-    },
+    "/todo/{todo_id}", response_model=TodoResponse, status_code=status.HTTP_200_OK
 )
 async def read_todo(
     user: user_dependencies,
@@ -89,7 +76,7 @@ async def read_todo(
     todo_id: Annotated[int, Path(gt=0)],
 ):
     if user is None:
-        raise HTTPException(status_code=401, detail=auth_failed)
+        raise AuthenticationException()
 
     todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
 
@@ -103,7 +90,7 @@ async def read_todo(
 
     if todo_model is not None:
         return todo_model
-    raise HTTPException(status_code=404, detail=not_found)
+    raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
 
 
 # UPDATE
@@ -122,7 +109,7 @@ async def update_todo(
     todo_request: TodoRequest,
 ):
     if user is None:
-        raise HTTPException(status_code=401, detail=auth_failed)
+        raise AuthenticationException()
 
     todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
 
@@ -134,7 +121,7 @@ async def update_todo(
             .first()
         )
     if todo_model is None:
-        raise HTTPException(status_code=404, detail=not_found)
+        raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
 
     todo_model.title = todo_request.title
     todo_model.description = todo_request.description
@@ -159,7 +146,7 @@ async def delete_todo(
 ):
 
     if user is None:
-        raise HTTPException(status_code=401, detail=auth_failed)
+        raise AuthenticationException()
 
     todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
 
@@ -171,6 +158,6 @@ async def delete_todo(
             .first()
         )
     if todo_model is None:
-        raise HTTPException(status_code=404, detail=not_found)
+        raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
     db.delete(todo_model)
     db.commit()
