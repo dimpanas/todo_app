@@ -10,23 +10,26 @@ class TodoBase(BaseModel):
     complete: bool
 
 
-class UserBase(BaseModel):
-    email: str
-    username: str = Field(min_length=1)
-    first_name: str = Field(min_length=1)
-    last_name: str = Field(min_length=1)
-    role: UserRole = UserRole.USER
-
-
 class TodoRequest(TodoBase):
     pass
 
 
 class TodoResponse(TodoBase):
     id: int = Field(gt=0)
+    owner_id: int
+    owner: UserUsername
 
     class Config:
         from_attributes = True
+
+
+class UserBase(BaseModel):
+    email: str
+    username: str = Field(min_length=1)
+    first_name: str = Field(min_length=1)
+    last_name: str = Field(min_length=1)
+    role: UserRole = UserRole.USER
+    is_active: bool
 
 
 class UserRequest(UserBase):
@@ -35,7 +38,13 @@ class UserRequest(UserBase):
 
 class UserResponse(UserBase):
     id: int = Field(gt=0)
-    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class UserUsername(BaseModel):
+    username: str
 
     class Config:
         from_attributes = True

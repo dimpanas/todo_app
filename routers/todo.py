@@ -9,20 +9,46 @@ from database import get_db
 from models import Todos
 from schemas import TodoRequest, TodoResponse
 
-router = APIRouter()
+from .auth import get_current_user
+
+router = APIRouter(prefix="/user", tags=["user"])
 
 
 db_dependencies = Annotated[Session, Depends(get_db)]
+user_dependencies = Annotated[dict, Depends(get_current_user)]
 
 not_found = "Todo not found"
+auth_failed = "Authentication Failed"
 
 
 # CREATE
 @router.post(
-    "/create_todo", response_model=TodoResponse, status_code=status.HTTP_201_CREATED
+    "/create_todo",
+    response_model=TodoResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        401: {"description": "User not found"},
+        403: {"description": "Is not admin"},
+    },
 )
-async def create_todo(db: db_dependencies, todo_request: TodoRequest):
-    todo_model = Todos(**todo_request.model_dump())
+async def create_todo(
+    user: user_dependencies,
+    db: db_dependencies,
+    todo_request: TodoRequest,
+    target_user_id: int = None,
+):
+    if user is None:
+        raise HTTPException(status_code=401, detail=auth_failed)
+
+    final_owner_id = user.get("id")
+
+    if target_user_id is not None:
+        if user.get("role") == "admin":
+            final_owner_id = target_user_id
+        else:
+            raise HTTPException(status_code=403, detail=not_found)
+
+    todo_model = Todos(**todo_request.model_dump(), owner_id=final_owner_id)
     db.add(todo_model)
     db.commit()
     db.refresh(todo_model)
@@ -30,19 +56,51 @@ async def create_todo(db: db_dependencies, todo_request: TodoRequest):
 
 
 # READ
-@router.get("/", response_model=list[TodoResponse], status_code=status.HTTP_200_OK)
-async def read_all_todos(db: db_dependencies):
-    return db.query(Todos).all()
+@router.get(
+    "/",
+    response_model=list[TodoResponse],
+    status_code=status.HTTP_200_OK,
+    responses={401: {"description": "User not found"}},
+)
+async def read_all_todos(
+    db: db_dependencies, user: user_dependencies, all_records: bool = False
+):
+    if user is None:
+        raise HTTPException(status_code=401, detail=auth_failed)
+
+    if all_records and user.get("role") == "admin":
+        return db.query(Todos).all()
+
+    return db.query(Todos).filter(Todos.owner_id == user.get("id")).all()
 
 
 @router.get(
     "/todo/{todo_id}",
     response_model=TodoResponse,
     status_code=status.HTTP_200_OK,
-    responses={404: {"description": "Todo not found"}},
+    responses={
+        404: {"description": "Todo not found"},
+        401: {"description": "User not found"},
+    },
 )
-async def read_todo(db: db_dependencies, todo_id: Annotated[int, Path(gt=0)]):
+async def read_todo(
+    user: user_dependencies,
+    db: db_dependencies,
+    todo_id: Annotated[int, Path(gt=0)],
+):
+    if user is None:
+        raise HTTPException(status_code=401, detail=auth_failed)
+
     todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
+
+    if user.get("role") != "admin":
+        todo_model = (
+            db.query(Todos)
+            .filter(Todos.id == todo_id)
+            .filter(Todos.owner_id == user.get("id"))
+            .first()
+        )
+
     if todo_model is not None:
         return todo_model
     raise HTTPException(status_code=404, detail=not_found)
@@ -52,12 +110,29 @@ async def read_todo(db: db_dependencies, todo_id: Annotated[int, Path(gt=0)]):
 @router.put(
     "/todo/{todo_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={404: {"description": "Todo not found"}},
+    responses={
+        404: {"description": "Todo not found"},
+        401: {"description": "User not found"},
+    },
 )
 async def update_todo(
-    db: db_dependencies, todo_id: Annotated[int, Path(gt=0)], todo_request: TodoRequest
+    user: user_dependencies,
+    db: db_dependencies,
+    todo_id: Annotated[int, Path(gt=0)],
+    todo_request: TodoRequest,
 ):
+    if user is None:
+        raise HTTPException(status_code=401, detail=auth_failed)
+
     todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
+
+    if user.get("role") != "admin":
+        todo_model = (
+            db.query(Todos)
+            .filter(Todos.id == todo_id)
+            .filter(Todos.owner_id == user.get("id"))
+            .first()
+        )
     if todo_model is None:
         raise HTTPException(status_code=404, detail=not_found)
 
@@ -74,12 +149,28 @@ async def update_todo(
 @router.delete(
     "/todo/{todo_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={404: {"description": "Todo not found"}},
+    responses={
+        404: {"description": "Todo not found"},
+        401: {"description": "User not found"},
+    },
 )
-async def delete_todo(db: db_dependencies, todo_id: Annotated[int, Path(gt=0)]):
+async def delete_todo(
+    user: user_dependencies, db: db_dependencies, todo_id: Annotated[int, Path(gt=0)]
+):
+
+    if user is None:
+        raise HTTPException(status_code=401, detail=auth_failed)
+
     todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
+
+    if user.get("role") != "admin":
+        todo_model = (
+            db.query(Todos)
+            .filter(Todos.id == todo_id)
+            .filter(Todos.owner_id == user.get("id"))
+            .first()
+        )
     if todo_model is None:
         raise HTTPException(status_code=404, detail=not_found)
-    # db.query(Todos).filter(Todos.id == todo_id).delete()
     db.delete(todo_model)
     db.commit()

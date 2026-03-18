@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from database import get_db
-from models import Users
+from models import UserRole, Users
 from schemas import UserRequest, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -27,9 +27,11 @@ ALGORITHM = os.getenv("ALGORITHM")
 
 
 # LOGIN(JWT)
-def create_access_token(username: str, user_id: int, expires_delta: timedelta):
+def create_access_token(
+    username: str, user_id: int, role: str, expires_delta: timedelta
+):
     expires = datetime.now(timezone.utc) + expires_delta
-    payload = {"sub": username, "id": user_id, "exp": expires}
+    payload = {"sub": username, "id": user_id, "role": role, "exp": expires}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -40,13 +42,14 @@ def get_current_user(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         user_id: int = payload.get("id")
+        role: str = payload.get("role")
         if username is None or user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate user.",
             )
 
-        return {"username": username, "id": user_id}
+        return {"username": username, "id": user_id, "role": role}
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user."
@@ -74,7 +77,9 @@ async def login_for_access_token(
     if not password:
         raise HTTPException(status_code=401, detail="Incorrect password.")
 
-    token = create_access_token(user.username, user.id, timedelta(minutes=20))
+    token = create_access_token(
+        user.username, user.id, user.role, timedelta(minutes=20)
+    )
 
     return {"access_token": token, "token_type": "bearer"}
 
@@ -84,7 +89,7 @@ async def login_for_access_token(
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={400: {"description": "Username of email already registered"}},
+    responses={400: {"description": "Username or email already registered"}},
 )
 async def create_user(db: db_dependencies, create_user_request: UserRequest):
 
@@ -104,7 +109,7 @@ async def create_user(db: db_dependencies, create_user_request: UserRequest):
         username=create_user_request.username,
         first_name=create_user_request.first_name,
         last_name=create_user_request.last_name,
-        role=create_user_request.role,
+        role=UserRole.USER,
         hashed_password=bcrypt_context.hash(create_user_request.hashed_password),
         is_active=True,
     )

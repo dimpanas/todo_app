@@ -34,7 +34,7 @@ class Todos(Base):
     title = Column(String)
     description = Column(String)
     priority = Column(Integer)
-    complete = Column(Boolean)
+    complete = Column(Boolean, default=True)
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("Users", back_populates="todos")
