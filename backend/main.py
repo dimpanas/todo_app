@@ -1,20 +1,17 @@
+from config import settings
 from exceptions import AppBaseException
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routers import admin, auth, todo
 
-origins = [
-    "http://localhost:5173",  # Vite default
-    "https://yourdomain.com",
-]
 app = FastAPI()
 
 # models.Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.CORS_ORIGIN,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -3,9 +3,7 @@ from typing import Annotated
 
 from database import get_db
 from exceptions import (
-    AuthenticationException,
     ResourceNotFoundException,
-    UnauthorizedActionException,
     UserAlreadyExist,
 )
 from fastapi import APIRouter, Path
@@ -16,9 +14,11 @@ from schemas import UserPaginationResponse, UserRequest, UserResponse
 from sqlalchemy.orm import Session
 from starlette import status
 
-from .auth import get_current_user
+from .auth import get_admin_user, get_current_user
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin", tags=["admin"], dependencies=[Depends(get_admin_user)]
+)
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -71,12 +71,6 @@ async def get_users(
     page: int = 1,
     page_size: int = 10,
 ):
-    if user is None:
-        raise AuthenticationException()
-
-    if user.get("role") != "admin":
-        raise UnauthorizedActionException()
-
     skip = (page - 1) * page_size
     query = db.query(Users)
     total_count = query.count()
@@ -101,12 +95,6 @@ async def get_users(
 async def get_user(
     user: user_dependencies, db: db_dependencies, user_id: Annotated[int, Path(gt=0)]
 ):
-    if user is None:
-        raise AuthenticationException()
-
-    if user.get("role") != "admin":
-        raise UnauthorizedActionException()
-
     user_model = db.query(Users).filter(Users.id == user_id).first()
 
     if user_model is not None:
@@ -122,12 +110,6 @@ async def update_user(
     user_id: Annotated[int, Path(gt=0)],
     user_request: UserRequest,
 ):
-    if user is None:
-        raise AuthenticationException()
-
-    if user.get("role") != "admin":
-        raise UnauthorizedActionException()
-
     user_model = db.query(Users).filter(Users.id == user_id).first()
 
     if user_model is None:
@@ -148,12 +130,6 @@ async def update_user(
 async def delete_user(
     user: user_dependencies, db: db_dependencies, user_id: Annotated[int, Path(gt=0)]
 ):
-    if user is None:
-        raise AuthenticationException()
-
-    if user.get("role") != "admin":
-        raise UnauthorizedActionException()
-
     user_model = db.query(Users).filter(Users.id == user_id).first()
 
     if user_model is None:

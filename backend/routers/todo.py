@@ -23,6 +23,23 @@ db_dependencies = Annotated[Session, Depends(get_db)]
 user_dependencies = Annotated[dict, Depends(get_current_user)]
 
 
+def get_todo(db: Session, user: dict, todo_id: int):
+    if user is None:
+        raise AuthenticationException()
+
+    query = db.query(Todos).filter(Todos.id == todo_id)
+
+    if user.get("role") != "admin":
+        query = query.filter(Todos.owner_id == user.get("id"))
+
+    todo_model = query.first()
+
+    if todo_model is None:
+        raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
+
+    return todo_model
+
+
 # CREATE
 @router.post(
     "/create_todo",
@@ -35,21 +52,17 @@ async def create_todo(
     todo_request: TodoRequest,
     target_user_id: int = None,
 ):
-    if user is None:
-        raise AuthenticationException()
-
     final_owner_id = user.get("id")
 
     if target_user_id is not None:
-        if user.get("role") == "admin":
-            check_user = db.query(Users).filter(Users.id == target_user_id).first()
-            if not check_user:
-                raise ResourceNotFoundException(
-                    resource_name="User", resource_id=target_user_id
-                )
-            final_owner_id = target_user_id
-        else:
+        if user.get("role") != "admin":
             raise UnauthorizedActionException()
+        check_user = db.query(Users).filter(Users.id == target_user_id).first()
+        if not check_user:
+            raise ResourceNotFoundException(
+                resource_name="User", resource_id=target_user_id
+            )
+        final_owner_id = target_user_id
 
     todo_model = Todos(**todo_request.model_dump(), owner_id=final_owner_id)
     db.add(todo_model)
@@ -67,12 +80,8 @@ async def read_all_todos(
     page: int = 1,
     page_size: int = 10,
 ):
-
     skip = (page - 1) * page_size
     query = db.query(Todos)
-
-    if user is None:
-        raise AuthenticationException()
 
     if not (all_records and user.get("role") == "admin"):
         query = query.filter(Todos.owner_id == user.get("id"))
@@ -99,22 +108,7 @@ async def read_todo(
     db: db_dependencies,
     todo_id: Annotated[int, Path(gt=0)],
 ):
-    if user is None:
-        raise AuthenticationException()
-
-    todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
-
-    if user.get("role") != "admin":
-        todo_model = (
-            db.query(Todos)
-            .filter(Todos.id == todo_id)
-            .filter(Todos.owner_id == user.get("id"))
-            .first()
-        )
-
-    if todo_model is not None:
-        return todo_model
-    raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
+    return get_todo(db, user, todo_id)
 
 
 # UPDATE
@@ -132,20 +126,7 @@ async def update_todo(
     todo_id: Annotated[int, Path(gt=0)],
     todo_request: TodoRequest,
 ):
-    if user is None:
-        raise AuthenticationException()
-
-    todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
-
-    if user.get("role") != "admin":
-        todo_model = (
-            db.query(Todos)
-            .filter(Todos.id == todo_id)
-            .filter(Todos.owner_id == user.get("id"))
-            .first()
-        )
-    if todo_model is None:
-        raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
+    todo_model = get_todo(db, user, todo_id)
 
     todo_model.title = todo_request.title
     todo_model.description = todo_request.description
@@ -157,31 +138,10 @@ async def update_todo(
 
 
 # DELETE
-@router.delete(
-    "/todo/{todo_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={
-        404: {"description": "Todo not found"},
-        401: {"description": "User not found"},
-    },
-)
+@router.delete("/todo/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_todo(
     user: user_dependencies, db: db_dependencies, todo_id: Annotated[int, Path(gt=0)]
 ):
-
-    if user is None:
-        raise AuthenticationException()
-
-    todo_model = db.query(Todos).filter(Todos.id == todo_id).first()
-
-    if user.get("role") != "admin":
-        todo_model = (
-            db.query(Todos)
-            .filter(Todos.id == todo_id)
-            .filter(Todos.owner_id == user.get("id"))
-            .first()
-        )
-    if todo_model is None:
-        raise ResourceNotFoundException(resource_name="Todo", resource_id=todo_id)
+    todo_model = get_todo(db, user, todo_id)
     db.delete(todo_model)
     db.commit()

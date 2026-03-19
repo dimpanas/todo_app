@@ -1,9 +1,8 @@
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+from config import settings
 from database import get_db
-from dotenv import load_dotenv
 from exceptions import (
     AuthenticationException,
     ResourceNotFoundException,
@@ -26,11 +25,10 @@ db_dependencies = Annotated[Session, Depends(get_db)]
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS"))
-REFRESH_SECRET_KEY = os.getenv("REFRESH_SECRET_KEY")
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
+REFRESH_SECRET_KEY = settings.REFRESH_SECRET_KEY
 
 
 def create_refresh_token(username: str, user_id: int):
@@ -63,13 +61,25 @@ def get_current_user(
         if user_model is None:
             raise ResourceNotFoundException(resource_name="User", resource_id=user_id)
 
+        if user_model.refresh_token is None:
+            raise UnauthorizedActionException("Session expired. Please login again.")
+
         if not user_model.is_active:
             raise UnauthorizedActionException(details="User account is deactivated")
 
         return {"username": username, "id": user_id, "role": role}
 
     except JWTError:
-        raise AuthenticationException(details="Access token expired or invalid")
+        raise UnauthorizedActionException(details="Access token expired or invalid")
+
+
+def get_admin_user(user: Annotated[dict, Depends(get_current_user)]):
+    if user is None:
+        raise AuthenticationException()
+
+    if user.get("role") != "admin":
+        raise UnauthorizedActionException(details="Admin privileges required")
+    return user
 
 
 # LOGIN
