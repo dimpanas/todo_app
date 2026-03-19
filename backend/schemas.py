@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from __future__ import annotations
 
 from models import UserRole
+from pydantic import BaseModel, Field
 
 
 class TodoBase(BaseModel):
