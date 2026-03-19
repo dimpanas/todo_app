@@ -3,12 +3,12 @@ from typing import Annotated
 
 from database import get_db
 from exceptions import (
-    AuthenticationException,
     ResourceNotFoundException,
     UnauthorizedActionException,
 )
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Request
 from fastapi.params import Depends
+from main import limiter
 from models import Todos, Users
 from schemas import TodoPaginationResponse, TodoRequest, TodoResponse
 from sqlalchemy.orm import Session
@@ -24,8 +24,6 @@ user_dependencies = Annotated[dict, Depends(get_current_user)]
 
 
 def get_todo(db: Session, user: dict, todo_id: int):
-    if user is None:
-        raise AuthenticationException()
 
     query = db.query(Todos).filter(Todos.id == todo_id)
 
@@ -46,7 +44,9 @@ def get_todo(db: Session, user: dict, todo_id: int):
     response_model=TodoResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("20/minute")
 async def create_todo(
+    request: Request,
     user: user_dependencies,
     db: db_dependencies,
     todo_request: TodoRequest,
@@ -73,7 +73,9 @@ async def create_todo(
 
 # READ
 @router.get("/", response_model=TodoPaginationResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("60/minute")
 async def read_all_todos(
+    request: Request,
     db: db_dependencies,
     user: user_dependencies,
     all_records: bool = False,
@@ -120,7 +122,9 @@ async def read_todo(
         401: {"description": "User not found"},
     },
 )
+@limiter.limit("30/minute")
 async def update_todo(
+    request: Request,
     user: user_dependencies,
     db: db_dependencies,
     todo_id: Annotated[int, Path(gt=0)],
@@ -139,8 +143,12 @@ async def update_todo(
 
 # DELETE
 @router.delete("/todo/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def delete_todo(
-    user: user_dependencies, db: db_dependencies, todo_id: Annotated[int, Path(gt=0)]
+    request: Request,
+    user: user_dependencies,
+    db: db_dependencies,
+    todo_id: Annotated[int, Path(gt=0)],
 ):
     todo_model = get_todo(db, user, todo_id)
     db.delete(todo_model)

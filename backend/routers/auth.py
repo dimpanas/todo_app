@@ -9,10 +9,11 @@ from exceptions import (
     UnauthorizedActionException,
     UserAlreadyExist,
 )
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.params import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from main import limiter
 from models import UserRole, Users
 from passlib.context import CryptContext
 from schemas import TokenResponse, UserRequest, UserResponse
@@ -84,15 +85,18 @@ def get_admin_user(user: Annotated[dict, Depends(get_current_user)]):
 
 # LOGIN
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 async def login_for_access_token(
-    db: db_dependencies, from_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    request: Request,
+    db: db_dependencies,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ):
-    user = db.query(Users).filter(Users.username == from_data.username).first()
+    user = db.query(Users).filter(Users.username == form_data.username).first()
 
     if not user:
         raise AuthenticationException(details="Username not found")
 
-    password = bcrypt_context.verify(from_data.password, user.hashed_password)
+    password = bcrypt_context.verify(form_data.password, user.hashed_password)
 
     if not password:
         raise AuthenticationException(details="Incorrect Password")
@@ -153,7 +157,10 @@ async def refresh_login(db: db_dependencies, refresh_token: str):
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-async def create_user(db: db_dependencies, create_user_request: UserRequest):
+@limiter.limit("3/hour")
+async def create_user(
+    request: Request, db: db_dependencies, create_user_request: UserRequest
+):
 
     existing_email = (
         db.query(Users).filter(Users.email == create_user_request.email).first()
