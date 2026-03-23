@@ -1,18 +1,19 @@
 import math
 from typing import Annotated
 
+from fastapi import APIRouter, Path, Request
+from fastapi.params import Depends
+from sqlalchemy.orm import Session
+from starlette import status
+
 from database import get_db
 from exceptions import (
     ResourceNotFoundException,
     UnauthorizedActionException,
 )
-from fastapi import APIRouter, Path, Request
-from fastapi.params import Depends
-from main import limiter
+from limiter import limiter
 from models import Todos, Users
 from schemas import TodoPaginationResponse, TodoRequest, TodoResponse
-from sqlalchemy.orm import Session
-from starlette import status
 
 from .auth import get_current_user
 
@@ -150,6 +151,6 @@ async def delete_todo(
     db: db_dependencies,
     todo_id: Annotated[int, Path(gt=0)],
 ):
-    todo_model = get_todo(db, user, todo_id)
+    todo_model = get_todo(db, user, todo_id)  # check
     db.delete(todo_model)
     db.commit()

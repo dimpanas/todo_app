@@ -1,6 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+from fastapi import APIRouter, Request
+from fastapi.params import Depends
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+from starlette import status
+
 from config import settings
 from database import get_db
 from exceptions import (
@@ -9,16 +17,9 @@ from exceptions import (
     UnauthorizedActionException,
     UserAlreadyExist,
 )
-from fastapi import APIRouter, Request
-from fastapi.params import Depends
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from main import limiter
+from limiter import limiter
 from models import UserRole, Users
-from passlib.context import CryptContext
 from schemas import TokenResponse, UserRequest, UserResponse
-from sqlalchemy.orm import Session
-from starlette import status
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
